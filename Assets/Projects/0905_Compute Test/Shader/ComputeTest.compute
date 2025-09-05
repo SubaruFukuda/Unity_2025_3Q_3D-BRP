@@ -1,0 +1,50 @@
+#pragma kernel computeA
+//#pragma kernel computeB
+//#pragma kernel computeC
+
+struct Test
+{
+    float valueA;
+    float comValue;
+    //float valueB;
+    //float valueC;
+};
+
+RWStructuredBuffer<Test> Buffer;
+
+#define NUM_THREADS_SIZE 4
+
+float _customNum;
+int _ElementCount;
+
+[numthreads(NUM_THREADS_SIZE,1,1)]
+void computeA(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= (uint)_ElementCount) return;
+    Buffer[i].valueA = (float)i;
+    Buffer[i].comValue = 2.0;
+}
+
+/*
+[numthreads(NUM_THREADS_SIZE,1,1)]
+void computeB(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= (uint)_ElementCount) return;
+    float a = Buffer[i].valueA;
+    float v = Buffer[i].comValue;
+
+    Buffer[i].valueB = a * v;
+}
+
+[numthreads(NUM_THREADS_SIZE,1,1)]
+void computeC(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= (uint)_ElementCount) return;
+    float a = Buffer[i].valueA;
+
+    Buffer[i].valueC = a * _customNum;
+}
+*/
