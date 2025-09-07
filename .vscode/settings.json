@@ -56,5 +56,5 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "2025_3Q_3D-BRP.sln"
+    "dotnet.defaultSolution": "Unity_2025_3Q_3D-BRP.sln"
 }
