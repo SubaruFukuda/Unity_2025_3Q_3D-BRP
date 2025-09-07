@@ -19,6 +19,7 @@
 		struct Input
 		{
 			float2 uv_MainTex;
+			float speed;
 		};
 		// Boidの構造体
 		struct BoidData
@@ -26,6 +27,7 @@
 			float3 velocity; // 速度
 			float3 position; // 位置
 		};
+
 
 		#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
 		// Boidデータの構造体バッファ
@@ -56,9 +58,12 @@
 			);
 		}
 
+
+
 		// 頂点シェーダ
-		void vert(inout appdata_full v)
+		void vert(inout appdata_full v, out Input o)
 		{
+			UNITY_INITIALIZE_OUTPUT(Input, o);
 			#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
 
 			// インスタンスIDからBoidのデータを取得
@@ -88,6 +93,8 @@
 			v.vertex = mul(object2world, v.vertex);
 			// 法線を座標変換
 			v.normal = normalize(mul(object2world, v.normal));
+
+			o.speed = length(boidData.velocity);
 			#endif
 		}
 		
@@ -98,8 +105,18 @@
 		// サーフェスシェーダ
 		void surf (Input IN, inout SurfaceOutputStandard o)
 		{
-			fixed4 c = tex2D (_MainTex, IN.uv_MainTex) * _Color;
-			o.Albedo = c.rgb;
+			float vel = IN.speed * 0.2;
+
+			float velbM = lerp (1.0, 0.0, vel);
+			float velgM = lerp (-0.7, 1.2, vel);
+			float velrM = lerp (-1.2, 1.2, vel);
+			
+			float velgMclamp = clamp(velgM, 0.0, 1.15);
+
+			float velrMclamp = clamp(velrM, 0.0, 1.15);
+
+    		fixed4 myColor = (fixed4)float4(velrMclamp, velgMclamp, 1.0, 1.0); // ← 定数色
+    		o.Albedo     = myColor.rgb;
 			o.Metallic = _Metallic;
 			o.Smoothness = _Glossiness;
 		}

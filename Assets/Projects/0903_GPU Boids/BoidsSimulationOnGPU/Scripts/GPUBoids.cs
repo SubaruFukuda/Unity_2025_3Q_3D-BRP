@@ -19,7 +19,7 @@ namespace BoidsSimulationOnGPU
 
         #region Boids Parameters
         // 最大オブジェクト数
-        [Range(256, 32768)]
+        [Range(256, 32768 * 2)]
         public int MaxObjectNum = 16384;
 
         // 結合を適用する他の個体との半径
@@ -41,6 +41,12 @@ namespace BoidsSimulationOnGPU
         // 分離する力の重み
         public float SeparateWeight = 3.0f;
 
+        public string RepelTag = "Repel";
+        public float RepelRadius = 3.0f;
+        public float RepelWeight = 3.0f;
+        [Range(1f, 8f)] public float RepelSharpness = 2.0f; 
+
+
         // 壁を避ける力の重み
         public float AvoidWallWeight = 10.0f;
 
@@ -60,6 +66,16 @@ namespace BoidsSimulationOnGPU
         ComputeBuffer _boidForceBuffer;
         // Boidの基本データ（速度, 位置, Transformなど）を格納したバッファ
         ComputeBuffer _boidDataBuffer;
+        //Repelのデータを格納するバッファ
+        ComputeBuffer _repelPosBuffer;
+
+        ComputeBuffer _addSpeedBuffer;
+        ComputeBuffer _prevMaxSpeed;
+        #endregion
+
+        #region GetRepelData
+        Transform[] _repelTargets;
+        int _repelCount;
         #endregion
 
         #region Accessors
@@ -93,12 +109,14 @@ namespace BoidsSimulationOnGPU
         {
             // バッファを初期化
             InitBuffer();
+
         }
 
         void Update()
         {
             // シミュレーション
-            Simulation();
+            UpdateRepelPositions(); // 先に最新位置を送る
+            Simulation();           // その後に計算
         }
 
         void OnDestroy()
@@ -119,16 +137,18 @@ namespace BoidsSimulationOnGPU
         // バッファを初期化
         void InitBuffer()
         {
-            // バッファを初期化
-            _boidDataBuffer = new ComputeBuffer(MaxObjectNum,
-                Marshal.SizeOf(typeof(BoidData)));
-            _boidForceBuffer = new ComputeBuffer(MaxObjectNum,
-                Marshal.SizeOf(typeof(Vector3)));
+            _boidDataBuffer  = new ComputeBuffer(MaxObjectNum, Marshal.SizeOf(typeof(BoidData)));
+            _boidForceBuffer = new ComputeBuffer(MaxObjectNum, Marshal.SizeOf(typeof(Vector3)));
 
-            // Boidデータ, Forceバッファを初期化
-            var forceArr = new Vector3[MaxObjectNum];
+            // AddSpeed は float 1要素（★これだけでOK。下の Vector3 で作り直す行は削除）
+            _addSpeedBuffer  = new ComputeBuffer(MaxObjectNum, sizeof(float));
+            // 前フレームの maxSp を保持
+            _prevMaxSpeed    = new ComputeBuffer(MaxObjectNum, sizeof(float));
+
+            // 初期化
+            var forceArr    = new Vector3[MaxObjectNum];
             var boidDataArr = new BoidData[MaxObjectNum];
-            for (var i = 0; i < MaxObjectNum; i++)
+            for (int i = 0; i < MaxObjectNum; i++)
             {
                 forceArr[i] = Vector3.zero;
                 boidDataArr[i].Position = Random.insideUnitSphere * 1.0f;
@@ -136,21 +156,59 @@ namespace BoidsSimulationOnGPU
             }
             _boidForceBuffer.SetData(forceArr);
             _boidDataBuffer.SetData(boidDataArr);
-            forceArr = null;
-            boidDataArr = null;
+
+            // AddSpeed を 0 で初期化
+            var zeros = new float[MaxObjectNum];
+            _addSpeedBuffer.SetData(zeros);
+
+            // PrevMaxSpeed を MaxSpeed で初期化
+            var initPrev = new float[MaxObjectNum];
+            for (int i = 0; i < MaxObjectNum; i++) initPrev[i] = MaxSpeed;
+            _prevMaxSpeed.SetData(initPrev);
+
+            // Repel 収集
+            var gos = GameObject.FindGameObjectsWithTag(RepelTag);
+            _repelTargets = new Transform[gos.Length];
+            for (int i = 0; i < gos.Length; i++) _repelTargets[i] = gos[i].transform;
+            _repelCount = _repelTargets.Length;
+
+            int count = Mathf.Max(_repelCount, 1);
+            _repelPosBuffer = new ComputeBuffer(count, sizeof(float) * 4);
+        }
+
+        void UpdateRepelPositions()
+        {
+            if (_repelPosBuffer == null) return;
+
+            int count = Mathf.Max(_repelCount, 1);
+            var temp = new Vector4[count];
+
+            if (_repelCount > 0)
+            {
+                for (int i = 0; i < _repelCount; i++)
+                {
+                    var p = _repelTargets[i].position;
+                    temp[i] = new Vector4(p.x, p.y, p.z, 1.0f);
+                }
+            }
+            else
+            {
+                temp[0] = Vector4.zero;
+            }
+
+            _repelPosBuffer.SetData(temp);
         }
 
         // シミュレーション
         void Simulation()
         {
-            ComputeShader cs = BoidsCS;
-            int id = -1;
+            var cs = BoidsCS;
 
-            // スレッドグループの数を求める
-            int threadGroupSize = Mathf.CeilToInt(MaxObjectNum / SIMULATION_BLOCK_SIZE);
+            // ★ 切り上げは float 割り算で
+            int threadGroupSize = Mathf.CeilToInt(MaxObjectNum / (float)SIMULATION_BLOCK_SIZE);
 
-            // 操舵力を計算
-            id = cs.FindKernel("ForceCS"); // カーネルIDを取得
+            // ForceCS
+            int kF = cs.FindKernel("ForceCS");
             cs.SetInt("_MaxBoidObjectNum", MaxObjectNum);
             cs.SetFloat("_CohesionNeighborhoodRadius", CohesionNeighborhoodRadius);
             cs.SetFloat("_AlignmentNeighborhoodRadius", AlignmentNeighborhoodRadius);
@@ -163,33 +221,41 @@ namespace BoidsSimulationOnGPU
             cs.SetVector("_WallCenter", WallCenter);
             cs.SetVector("_WallSize", WallSize);
             cs.SetFloat("_AvoidWallWeight", AvoidWallWeight);
-            cs.SetBuffer(id, "_BoidDataBufferRead", _boidDataBuffer);
-            cs.SetBuffer(id, "_BoidForceBufferWrite", _boidForceBuffer);
-            cs.Dispatch(id, threadGroupSize, 1, 1); // ComputeShaderを実行
 
-            // 操舵力から、速度と位置を計算
-            id = cs.FindKernel("IntegrateCS"); // カーネルIDを取得
+            cs.SetInt("_RepelCount", _repelCount);
+            cs.SetFloat("_RepelRadius", RepelRadius);
+            cs.SetFloat("_RepelWeight", RepelWeight);
+            cs.SetFloat("_RepelSharpness", RepelSharpness);
+
+            cs.SetBuffer(kF, "_BoidDataBufferRead", _boidDataBuffer);
+            cs.SetBuffer(kF, "_BoidForceBufferWrite", _boidForceBuffer);
+            cs.SetBuffer(kF, "_RepelPositions", _repelPosBuffer);
+            cs.SetBuffer(kF, "_AddSpeedBuffer", _addSpeedBuffer);
+            cs.Dispatch(kF, threadGroupSize, 1, 1);
+
+            // IntegrateCS
+            int kI = cs.FindKernel("IntegrateCS");
             cs.SetFloat("_DeltaTime", Time.deltaTime);
-            cs.SetBuffer(id, "_BoidForceBufferRead", _boidForceBuffer);
-            cs.SetBuffer(id, "_BoidDataBufferWrite", _boidDataBuffer);
-            cs.Dispatch(id, threadGroupSize, 1, 1); // ComputeShaderを実行
+            // _MaxSpeed を Integrate でも使うならここで更新しておくと安心
+            cs.SetFloat("_MaxSpeed", MaxSpeed);
+
+            cs.SetBuffer(kI, "_BoidForceBufferRead", _boidForceBuffer);
+            cs.SetBuffer(kI, "_BoidDataBufferWrite", _boidDataBuffer);
+            cs.SetBuffer(kI, "_AddSpeedBuffer", _addSpeedBuffer);
+            cs.SetBuffer(kI, "_PrevMaxSpeed", _prevMaxSpeed);
+            cs.Dispatch(kI, threadGroupSize, 1, 1);
         }
+
 
         // バッファを解放
         void ReleaseBuffer()
         {
-            if (_boidDataBuffer != null)
-            {
-                _boidDataBuffer.Release();
-                _boidDataBuffer = null;
-            }
-
-            if (_boidForceBuffer != null)
-            {
-                _boidForceBuffer.Release();
-                _boidForceBuffer = null;
-            }
+            if (_boidDataBuffer != null) { _boidDataBuffer.Release(); _boidDataBuffer = null; }
+            if (_boidForceBuffer != null) { _boidForceBuffer.Release(); _boidForceBuffer = null; }
+            if (_repelPosBuffer != null) { _repelPosBuffer.Release(); _repelPosBuffer = null; }
+            if (_addSpeedBuffer != null) { _addSpeedBuffer.Release(); _addSpeedBuffer = null; }
+            if (_prevMaxSpeed != null) { _prevMaxSpeed.Release(); _prevMaxSpeed = null; }
         }
+    }
         #endregion
-    } // class
-} // namespace
+}

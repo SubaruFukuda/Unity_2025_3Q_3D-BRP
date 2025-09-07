@@ -20,6 +20,13 @@ RWStructuredBuffer<BoidData> _BoidDataBufferWrite;
 StructuredBuffer<float3>     _BoidForceBufferRead;
 // Boidの操舵力のバッファ（読み取り, 書き込み用）
 RWStructuredBuffer<float3>   _BoidForceBufferWrite;
+// Repel用のバッファ
+StructuredBuffer<float4> _RepelPositions;
+
+// Repel用のバッファ
+RWStructuredBuffer<float> _AddSpeedBuffer;
+RWStructuredBuffer<float> _PrevMaxSpeed; // 個体ごとの「前回の maxSp」
+
 
 int _MaxBoidObjectNum; // Boidオブジェクト数
 
@@ -39,6 +46,14 @@ float _CohesionWeight;  // 結合適用時の重み
 float4 _WallCenter;      // 壁の中心座標
 float4 _WallSize;        // 壁のサイズ
 float  _AvoidWallWeight; // 壁を避ける強さの重み
+
+
+int   _RepelCount;
+float _RepelRadius;
+float _RepelWeight;
+float _RepelSharpness; 
+
+float addMaxSpeed;
 
 
 // ベクトルの大きさを制限する
@@ -99,6 +114,8 @@ void ForceCS
 	float3 P_velocity = _BoidDataBufferRead[P_ID].velocity; // 自身の速度
 
 	float3 force = float3(0, 0, 0); // 操舵力を初期化
+
+	float addSpeed = 0;
 
 	float3 sepPosSum = float3(0, 0, 0); // 分離計算用 位置加算変数
 	int sepCount = 0; // 分離のために計算した他の個体の数のカウント用変数
@@ -192,29 +209,72 @@ void ForceCS
 	force += cohSteer * _CohesionWeight;  // 操舵力に結合する力を加える
 	force += sepSteer * _SeparateWeight;  // 操舵力に分離する力を加える
 
+	//Repelの計算
+	if (_RepelCount > 0 && _RepelRadius > 0.0)
+	{
+		float3 repelForce = (float3)0.0;
+		[loop]
+		for (int i = 0; i < _RepelCount; i++)
+		{
+			float3 rpos = _RepelPositions[i].xyz;
+			float2 diff2D = (P_position.xy - rpos.xy);
+			float  dist = length(diff2D);
+			if (dist > 0.0001 && dist < _RepelRadius)
+			{
+				float nd = saturate(1.0 - dist / _RepelRadius);    // 0..1
+				float gain = pow(nd, _RepelSharpness);             // 立ち上がり調整
+				float2 dir2D = diff2D / dist;
+				float3 dir = float3(dir2D.x, dir2D.y, 0);                         // 反発方向
+				// MaxSpeed近辺へ押す“操舵”にしたい場合はlimit相当を使う
+				repelForce += dir * gain;
+				addSpeed = 250.0;
+			}
+		}
+		// 重み付けしてforceへ
+		// MaxSteerForceに合わせたい場合はnormalize・limitを噛ませてもOK
+		repelForce = repelForce * _RepelWeight;
+		force += repelForce;
+	}
+
 	_BoidForceBufferWrite[P_ID] = force; // 書き込み
+	_AddSpeedBuffer[P_ID] = addSpeed;
+	
 }
 
 // 速度, 位置計算用カーネル関数
 [numthreads(SIMULATION_BLOCK_SIZE, 1, 1)]
-void IntegrateCS
-(
-	uint3 DTid : SV_DispatchThreadID // スレッド全体で固有のID
-)
+void IntegrateCS(uint3 DTid : SV_DispatchThreadID)
 {
-	const unsigned int P_ID = DTid.x;          // インデックスを取得
-											           
-	BoidData b = _BoidDataBufferWrite[P_ID];   // 現在のBoidデータを読み込む
-	float3 force = _BoidForceBufferRead[P_ID]; // 操舵力を読み込む
-	
-	// 壁に近づいたら反発する力を与える
-	//force += avoidWall(b.position) * _AvoidWallWeight; 
+    const uint P_ID = DTid.x;
 
-	b.velocity += force * _DeltaTime;          // 操舵力を速度に適用
-	b.velocity = limit(b.velocity, _MaxSpeed); // 速度を制限
-	b.position += b.velocity * _DeltaTime;     // 位置を更新
-	b.position = warpPosition(b.position);
-											           
-	_BoidDataBufferWrite[P_ID] = b;            // 計算結果を書き込む
-	
+    BoidData b   = _BoidDataBufferWrite[P_ID];
+    float3   force = _BoidForceBufferRead[P_ID];
+    float    extra = _AddSpeedBuffer[P_ID];
+
+    // 目標上限
+    float targetMax = _MaxSpeed + extra;
+
+    // 前フレーム値を読む（初期化はC#側で）
+    float prev = _PrevMaxSpeed[P_ID];
+
+    // 平滑化係数（フレームレート非依存の指数平滑。5.0は応答速度）
+    float alpha = 1.0 - exp(-_DeltaTime * 5.0);
+
+    // 正しい向きのlerp：prev → targetMax へ近づける
+    float maxSp = lerp(prev, targetMax, 0.05);
+
+    // 次フレーム用に保存
+    _PrevMaxSpeed[P_ID] = maxSp;
+
+    // 壁回避
+    force += avoidWall(b.position) * _AvoidWallWeight;
+
+    // 速度更新＆制限
+    b.velocity += force * _DeltaTime;
+    b.velocity = limit(b.velocity, maxSp);
+
+    // 位置更新
+    b.position += b.velocity * _DeltaTime;
+
+    _BoidDataBufferWrite[P_ID] = b;
 }
