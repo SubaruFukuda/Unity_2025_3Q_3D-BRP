@@ -591,7 +591,7 @@ Camera:
   far clip plane: 1000
   field of view: 77.2
   orthographic: 1
-  orthographic size: 32.5
+  orthographic size: 33.5
   m_Depth: 0
   m_CullingMask:
     serializedVersion: 2
@@ -712,22 +712,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4be9a8d5d645e4545886be6914d2e5e9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MaxObjectNum: 65536
+  MaxObjectNum: 8192
   CohesionNeighborhoodRadius: 1.5
   AlignmentNeighborhoodRadius: 1.5
   SeparateNeighborhoodRadius: 1
-  MaxSpeed: 5
-  MaxSteerForce: 1.15
-  CohesionWeight: 3
-  AlignmentWeight: 3
-  SeparateWeight: 6
+  MaxSpeed: 4
+  MaxSteerForce: 1
+  CohesionWeight: 4
+  AlignmentWeight: 4
+  SeparateWeight: 7
   RepelTag: Repel
-  RepelRadius: 6
+  RepelRadius: 4
   RepelWeight: 128
   RepelSharpness: 1
   AvoidWallWeight: 10
   WallCenter: {x: 0, y: 0, z: 0}
-  WallSize: {x: 120, y: 67.5, z: 60}
+  WallSize: {x: 120, y: 67.5, z: 4}
   BoidsCS: {fileID: 7200000, guid: 47567044d261e474db26e25410628c0a, type: 3}
 --- !u!4 &583646681
 Transform:

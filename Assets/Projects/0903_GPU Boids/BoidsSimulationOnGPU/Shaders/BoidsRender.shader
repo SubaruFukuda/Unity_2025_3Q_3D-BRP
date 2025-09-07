@@ -20,6 +20,7 @@
 		{
 			float2 uv_MainTex;
 			float speed;
+			float color;
 		};
 		// Boidの構造体
 		struct BoidData

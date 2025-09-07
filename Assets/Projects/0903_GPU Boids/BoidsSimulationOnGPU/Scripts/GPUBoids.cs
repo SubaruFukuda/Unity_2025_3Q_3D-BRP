@@ -71,6 +71,7 @@ namespace BoidsSimulationOnGPU
 
         ComputeBuffer _addSpeedBuffer;
         ComputeBuffer _prevMaxSpeed;
+        ComputeBuffer _stateBuffer;
         #endregion
 
         #region GetRepelData
@@ -144,6 +145,8 @@ namespace BoidsSimulationOnGPU
             _addSpeedBuffer  = new ComputeBuffer(MaxObjectNum, sizeof(float));
             // 前フレームの maxSp を保持
             _prevMaxSpeed    = new ComputeBuffer(MaxObjectNum, sizeof(float));
+
+            _stateBuffer = new ComputeBuffer(MaxObjectNum, sizeof(float));
 
             // 初期化
             var forceArr    = new Vector3[MaxObjectNum];
@@ -231,6 +234,7 @@ namespace BoidsSimulationOnGPU
             cs.SetBuffer(kF, "_BoidForceBufferWrite", _boidForceBuffer);
             cs.SetBuffer(kF, "_RepelPositions", _repelPosBuffer);
             cs.SetBuffer(kF, "_AddSpeedBuffer", _addSpeedBuffer);
+            cs.SetBuffer(kF, "_StateBuffer", _stateBuffer);
             cs.Dispatch(kF, threadGroupSize, 1, 1);
 
             // IntegrateCS
@@ -255,6 +259,7 @@ namespace BoidsSimulationOnGPU
             if (_repelPosBuffer != null) { _repelPosBuffer.Release(); _repelPosBuffer = null; }
             if (_addSpeedBuffer != null) { _addSpeedBuffer.Release(); _addSpeedBuffer = null; }
             if (_prevMaxSpeed != null) { _prevMaxSpeed.Release(); _prevMaxSpeed = null; }
+            if (_stateBuffer != null) { _stateBuffer.Release(); _stateBuffer = null; }
         }
     }
         #endregion

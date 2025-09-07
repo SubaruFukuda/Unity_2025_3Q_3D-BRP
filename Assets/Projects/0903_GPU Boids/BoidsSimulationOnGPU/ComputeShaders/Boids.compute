@@ -9,6 +9,12 @@ struct BoidData
 	float3 position; // 位置
 };
 
+struct state
+{
+	int state;
+	float colorSel;
+};
+
 // スレッドグループのスレッドのサイズ
 #define SIMULATION_BLOCK_SIZE 256
 
@@ -26,6 +32,8 @@ StructuredBuffer<float4> _RepelPositions;
 // Repel用のバッファ
 RWStructuredBuffer<float> _AddSpeedBuffer;
 RWStructuredBuffer<float> _PrevMaxSpeed; // 個体ごとの「前回の maxSp」
+
+RWStructuredBuffer<state> _StateBuffer;
 
 
 int _MaxBoidObjectNum; // Boidオブジェクト数
@@ -52,8 +60,6 @@ int   _RepelCount;
 float _RepelRadius;
 float _RepelWeight;
 float _RepelSharpness; 
-
-float addMaxSpeed;
 
 
 // ベクトルの大きさを制限する
@@ -164,6 +170,14 @@ void ForceCS
 			{
 				aliVelSum += N_velocity; // 加算
 				aliCount++;              // 個体数カウント
+
+				if (aliCount > 15.0)
+				{
+					_SeparateNeighborhoodRadius = 20.0;
+					_SeparateWeight = 30.0;
+					_AlignmentNeighborhoodRadius = 0.0;
+					_CohesionNeighborhoodRadius = 0.0;
+				}
 			}
 
 			// --- 結合（Cohesion） ---
@@ -227,7 +241,7 @@ void ForceCS
 				float3 dir = float3(dir2D.x, dir2D.y, 0);                         // 反発方向
 				// MaxSpeed近辺へ押す“操舵”にしたい場合はlimit相当を使う
 				repelForce += dir * gain;
-				addSpeed = 250.0;
+				addSpeed = 75.0;
 			}
 		}
 		// 重み付けしてforceへ
@@ -261,7 +275,7 @@ void IntegrateCS(uint3 DTid : SV_DispatchThreadID)
     float alpha = 1.0 - exp(-_DeltaTime * 5.0);
 
     // 正しい向きのlerp：prev → targetMax へ近づける
-    float maxSp = lerp(prev, targetMax, 0.05);
+    float maxSp = lerp(prev, targetMax, 0.01);
 
     // 次フレーム用に保存
     _PrevMaxSpeed[P_ID] = maxSp;
