@@ -43,6 +43,12 @@
 
 		float3 _ObjectScale; // Boidオブジェクトのスケール
 
+		float4 _colorMin;
+		float4 _colorMax;
+		
+		
+		float4 colMix;
+
 		// オイラー角（ラジアン）を回転行列に変換
 		float4x4 eulerAnglesToRotationMatrix(float3 angles)
 		{
@@ -106,7 +112,16 @@
 		// サーフェスシェーダ
 		void surf (Input IN, inout SurfaceOutputStandard o)
 		{
-			float vel = IN.speed * 0.2;
+			float4 colMin = _colorMin;
+			float4 colMax = _colorMax;
+			float vel = IN.speed - 1.0;
+			float velNorm = saturate(vel / 4.0);
+			float velInv  = 1.0 - velNorm;
+
+			colMin = colMin * velInv;
+			colMax = colMax * velNorm;
+
+			colMix = colMin + colMax;
 
 			float velbM = lerp (1.0, 0.0, vel);
 			float velgM = lerp (-0.7, 1.2, vel);
@@ -117,7 +132,7 @@
 			float velrMclamp = clamp(velrM, 0.0, 1.15);
 
     		fixed4 myColor = (fixed4)float4(velrMclamp, velgMclamp, 1.0, 1.0); // ← 定数色
-    		o.Albedo     = myColor.rgb;
+    		o.Albedo     = colMix.rgb;
 			o.Metallic = _Metallic;
 			o.Smoothness = _Glossiness;
 		}

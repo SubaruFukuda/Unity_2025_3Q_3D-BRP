@@ -44,7 +44,9 @@ namespace BoidsSimulationOnGPU
         public string RepelTag = "Repel";
         public float RepelRadius = 3.0f;
         public float RepelWeight = 3.0f;
-        [Range(1f, 8f)] public float RepelSharpness = 2.0f; 
+        [Range(1f, 8f)] public float RepelSharpness = 2.0f;
+
+        public int digit;
 
 
         // 壁を避ける力の重み

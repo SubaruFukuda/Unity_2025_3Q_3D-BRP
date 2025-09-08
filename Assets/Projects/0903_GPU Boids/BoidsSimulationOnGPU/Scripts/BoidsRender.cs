@@ -8,6 +8,10 @@ namespace BoidsSimulationOnGPU
     [RequireComponent(typeof(GPUBoids))]
     public class BoidsRender : MonoBehaviour
     {
+        [Header("Color")]
+        public Color ColorMin;
+        public Color ColorMax;
+
         #region Paremeters
         // 描画するBoidsオブジェクトのスケール
         public Vector3 ObjectScale = new Vector3(0.1f, 0.2f, 0.5f);
@@ -78,6 +82,8 @@ namespace BoidsSimulationOnGPU
                 GPUBoidsScript.GetBoidDataBuffer());
             // Boidオブジェクトスケールをセット
             InstanceRenderMaterial.SetVector("_ObjectScale", ObjectScale);
+            InstanceRenderMaterial.SetColor("_colorMin", ColorMin);
+            InstanceRenderMaterial.SetColor("_colorMax", ColorMax);
             // 境界領域を定義
             var bounds = new Bounds
             (

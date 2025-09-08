@@ -171,12 +171,13 @@ void ForceCS
 				aliVelSum += N_velocity; // 加算
 				aliCount++;              // 個体数カウント
 
-				if (aliCount > 15.0)
+				if (aliCount > 10.0)
 				{
 					_SeparateNeighborhoodRadius = 20.0;
 					_SeparateWeight = 30.0;
 					_AlignmentNeighborhoodRadius = 0.0;
 					_CohesionNeighborhoodRadius = 0.0;
+					addSpeed = 15000.0;
 				}
 			}
 
@@ -241,7 +242,7 @@ void ForceCS
 				float3 dir = float3(dir2D.x, dir2D.y, 0);                         // 反発方向
 				// MaxSpeed近辺へ押す“操舵”にしたい場合はlimit相当を使う
 				repelForce += dir * gain;
-				addSpeed = 75.0;
+				addSpeed = 100.0;
 			}
 		}
 		// 重み付けしてforceへ
@@ -275,7 +276,7 @@ void IntegrateCS(uint3 DTid : SV_DispatchThreadID)
     float alpha = 1.0 - exp(-_DeltaTime * 5.0);
 
     // 正しい向きのlerp：prev → targetMax へ近づける
-    float maxSp = lerp(prev, targetMax, 0.01);
+    float maxSp = lerp(prev, targetMax, 0.03);
 
     // 次フレーム用に保存
     _PrevMaxSpeed[P_ID] = maxSp;
